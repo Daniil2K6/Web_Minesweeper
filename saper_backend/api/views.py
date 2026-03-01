@@ -2,16 +2,75 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from django.contrib.auth import login, logout
-from django.utils import timezone
-from .models import User, Leaderboard, GameResult
+from rest_framework.authtoken.models import Token
+from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth import authenticate as django_authenticate
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.middleware.csrf import get_token
+from .models import User, Leaderboard
 from .serializers import (
     UserSerializer, RegisterSerializer, LeaderboardSerializer,
-    GameResultSerializer, SaveScoreSerializer
+    SaveScoreSerializer
 )
 
 ADMIN_USERNAME = "N3XUS_C0R3"
 
+@ensure_csrf_cookie
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_csrf_token(request):
+    """Получить CSRF токен"""
+    token = get_token(request)
+    return Response({'csrfToken': token})
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    """Вход пользователя в систему"""
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    if not username or not password:
+        return Response({'error': 'Требуется имя пользователя и пароль'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
+    
+    user = django_authenticate(username=username, password=password)
+    
+    if user is not None:
+        login(request._request, user)
+        role = 'admin' if user.username == ADMIN_USERNAME else 'user'
+        
+        return Response({
+            'message': 'Вход выполнен',
+            'user': UserSerializer(user).data,
+            'role': role,
+            'username': user.username
+        }, status=status.HTTP_200_OK)
+    
+    return Response({'error': 'Неверное имя пользователя или пароль'}, 
+                   status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def current_user(request):
+    """Получить информацию о текущем пользователе"""
+    try:
+        user = request.user
+        if user and user.id:
+            role = 'admin' if user.username == ADMIN_USERNAME else 'user'
+            return Response({
+                'user': UserSerializer(user).data,
+                'role': role,
+                'username': user.username,
+                'is_authenticated': True
+            })
+    except Exception as e:
+        print(f'Ошибка в current_user: {e}')
+    
+    return Response({'is_authenticated': False})
+
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
@@ -19,12 +78,8 @@ def register(request):
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        
-        # Проверяем, не админ ли это
         role = 'admin' if user.username == ADMIN_USERNAME else 'user'
-        
-        # Автоматически логиним пользователя
-        login(request, user)
+        login(request._request, user)
         
         return Response({
             'message': 'Регистрация успешна',
@@ -35,13 +90,15 @@ def register(request):
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
     """Выход из системы"""
-    logout(request)
+    logout(request._request)
     return Response({'message': 'Выход выполнен'})
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_logout(request):
@@ -49,51 +106,39 @@ def admin_logout(request):
     if request.user.username != ADMIN_USERNAME:
         return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
     
-    logout(request)
+    logout(request._request)
     return Response({'message': 'Админ вышел'})
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def game_result(request):
-    """Сохранение результата игры"""
-    serializer = GameResultSerializer(data=request.data)
-    if serializer.is_valid():
-        # Создаём запись о результате
-        game_result = GameResult.objects.create(
-            user=request.user,
-            result=serializer.validated_data['result'],
-            mines=serializer.validated_data.get('mines', 10)
-        )
-        
-        # Обновляем статистику пользователя
-        request.user.total_games += 1
-        if serializer.validated_data['result'] == 'win':
-            request.user.wins += 1
-        request.user.last_game_result = serializer.validated_data['result']
-        request.user.save()
-        
-        return Response({
-            'message': 'Результат сохранён',
-            'stats': {
-                'total_games': request.user.total_games,
-                'wins': request.user.wins
-            }
-        })
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def save_score(request):
-    """Сохранение счёта в таблицу лидеров"""
+    """Сохранение счёта в таблицу лидеров (только если время улучшено)"""
     serializer = SaveScoreSerializer(data=request.data)
     if serializer.is_valid():
-        # Создаём запись в лидерборде
+        new_time = serializer.validated_data['time']
+        
+        # Проверяем есть ли уже результат для этого пользователя
+        existing = Leaderboard.objects.filter(user=request.user).order_by('time').first()
+        
+        if existing and existing.time < new_time:
+            # Уже есть лучший результат, не сохраняем
+            return Response({
+                'message': 'Результат не сохранён (уже есть лучший)',
+                'best_time': existing.time,
+                'new_time': new_time
+            }, status=status.HTTP_200_OK)
+        
+        # Создаём новую запись
         leaderboard_entry = Leaderboard.objects.create(
             user=request.user,
-            mines=serializer.validated_data['mines'],
-            time=serializer.validated_data['time']
+            time=new_time
         )
+        
+        # Обновляем статистику (только при сохранении нового результата)
+        request.user.total_games += 1
+        request.user.wins += 1
+        request.user.save()
         
         return Response({
             'message': 'Счёт сохранён в таблицу лидеров',
@@ -105,35 +150,17 @@ def save_score(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def leaderboard(request):
-    """Получение таблицы лидеров"""
-    # Берём топ-10 результатов
-    records = Leaderboard.objects.all().order_by('mines', 'time')[:10]
+    """Получение таблицы лидеров (топ-100)"""
+    records = Leaderboard.objects.all().order_by('time')[:100]
     serializer = LeaderboardSerializer(records, many=True)
-    
-    # Преобразуем в формат, ожидаемый фронтендом
-    formatted_data = [
-        {
-            'name': record['username'],
-            'mines': record['mines'],
-            'time': record['time']
-        }
-        for record in serializer.data
-    ]
-    
-    return Response(formatted_data)
+    return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_stats(request):
     """Получение статистики пользователя"""
-    # Получаем рекорды пользователя
-    user_records = Leaderboard.objects.filter(user=request.user)
+    user_records = Leaderboard.objects.filter(user=request.user).order_by('time')
     records_serializer = LeaderboardSerializer(user_records, many=True)
-    
-    # Статистика игр
-    games = GameResult.objects.filter(user=request.user)
-    wins = games.filter(result='win').count()
-    loses = games.filter(result='lose').count()
     
     return Response({
         'user': UserSerializer(request.user).data,
@@ -141,8 +168,6 @@ def user_stats(request):
         'stats': {
             'total_games': request.user.total_games,
             'wins': request.user.wins,
-            'loses': loses,
-            'win_rate': round((wins / games.count() * 100) if games.count() > 0 else 0, 1)
         }
     })
 
@@ -157,21 +182,19 @@ def reset_leaderboard(request):
     # Удаляем все записи в лидерборде
     Leaderboard.objects.all().delete()
     
-    # Создаём начальные записи (как в script.js)
+    # Создаём начальные записи
     initial_data = [
-        {'name': 'SHADOW', 'mines': 9, 'time': '42с'},
-        {'name': 'VIOLET_M', 'mines': 8, 'time': '55с'},
-        {'name': 'NOX', 'mines': 7, 'time': '1:02'},
-        {'name': 'FANTOM', 'mines': 6, 'time': '1:20'},
-        {'name': 'LUNA', 'mines': 5, 'time': '1:47'}
+        {'name': 'SHADOW', 'time': 42.510},
+        {'name': 'VIOLET_M', 'time': 55.320},
+        {'name': 'NOX', 'time': 62.150},
+        {'name': 'FANTOM', 'time': 80.450},
+        {'name': 'LUNA', 'time': 107.890}
     ]
     
     for data in initial_data:
-        # Создаём временного пользователя для этих записей
         user, _ = User.objects.get_or_create(username=data['name'])
         Leaderboard.objects.create(
             user=user,
-            mines=data['mines'],
             time=data['time']
         )
     
@@ -187,7 +210,6 @@ def delete_player(request, username):
     
     try:
         user = User.objects.get(username=username)
-        # Удаляем все записи пользователя в лидерборде
         Leaderboard.objects.filter(user=user).delete()
         return Response({'message': f'Игрок {username} удалён из лидерборда'})
     except User.DoesNotExist:

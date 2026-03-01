@@ -1,13 +1,12 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Leaderboard, GameResult
+from .models import User, Leaderboard
 
 class UserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
     class Meta:
         model = User
-        fields = ['id', 'username', 'total_games', 'wins', 
-                 'best_time_beginner', 'best_time_intermediate', 'best_time_expert']
+        fields = ['id', 'username', 'total_games', 'wins']
 
 class RegisterSerializer(serializers.Serializer):
     """Сериализатор регистрации с паролем"""
@@ -20,7 +19,6 @@ class RegisterSerializer(serializers.Serializer):
         return value
     
     def create(self, validated_data):
-        # Создаём пользователя с паролем
         user = User.objects.create_user(
             username=validated_data['username'],
             password=validated_data['password']
@@ -33,15 +31,8 @@ class LeaderboardSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Leaderboard
-        fields = ['id', 'username', 'mines', 'time', 'difficulty', 'created_at']
-
-class GameResultSerializer(serializers.ModelSerializer):
-    """Сериализатор результата игры"""
-    class Meta:
-        model = GameResult
-        fields = ['result', 'mines', 'timestamp']
+        fields = ['id', 'username', 'time', 'created_at']
 
 class SaveScoreSerializer(serializers.Serializer):
     """Сериализатор сохранения счёта"""
-    mines = serializers.IntegerField(min_value=1, max_value=10)
-    time = serializers.CharField(max_length=10)
+    time = serializers.FloatField(min_value=0.001)

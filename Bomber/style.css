@@ -167,6 +167,20 @@ body {
     box-shadow: 0 0 12px #cb9eff;
 }
 
+.game-timer {
+    background: #0e0b14;
+    color: #d9b0ff;
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    padding: 5px 16px;
+    border-radius: 40px;
+    text-shadow: 0 0 8px #bf7aff;
+    border: 1px solid #8f5acd;
+    box-shadow: inset 0 2px 5px #00000066;
+    letter-spacing: 2px;
+}
+
 .board-container {
     display: flex;
     justify-content: center;

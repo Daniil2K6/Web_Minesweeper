@@ -39,20 +39,194 @@
     let flags = [];
     let gameActive = true;
     let minesGenerated = false;
+    
+    // Таймер
+    let gameStartTime = null;
+    let timerInterval = null;
+    let elapsedTime = 0;
 
-    const ADMIN_USERNAME = "N3XUS_C0R3";
-    const ADMIN_PASSWORD = "GH05T_4DM1N";
+    const API_BASE = 'http://localhost:8000/api';
     
     let currentRole = 'guest';
     let currentUser = null;
-    let users = [];
-    let leaderboardData = [
-        { name: 'SHADOW', mines: 9, time: '42с' },
-        { name: 'VIOLET_M', mines: 8, time: '55с' },
-        { name: 'NOX', mines: 7, time: '1:02' },
-        { name: 'FANTOM', mines: 6, time: '1:20' },
-        { name: 'LUNA', mines: 5, time: '1:47' }
-    ];
+    let leaderboardData = [];
+
+    // Функция форматирования времени (0.001 секунды)
+    function formatTime(milliseconds) {
+        const seconds = milliseconds / 1000;
+        return seconds.toFixed(3) + 'с';
+    }
+
+    // Функция для запуска таймера
+    function startTimer() {
+        gameStartTime = Date.now();
+        timerInterval = setInterval(() => {
+            elapsedTime = Date.now() - gameStartTime;
+            const timeDisplay = formatTime(elapsedTime);
+            document.getElementById('gameTimer').textContent = timeDisplay;
+        }, 10); // обновляем каждые 10 миллисекунд для плавности
+    }
+
+    // Функция для остановки таймера
+    function stopTimer() {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        return elapsedTime / 1000; // возвращаем время в секундах
+    }
+
+    // API функции
+    const apiClient = {
+        async getCSRFToken() {
+            try {
+                const response = await fetch(`${API_BASE}/csrf-token`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                return data.csrfToken;
+            } catch (error) {
+                console.error('Ошибка получения CSRF токена:', error);
+                return null;
+            }
+        },
+
+        async getCurrentUser() {
+            try {
+                const response = await fetch(`${API_BASE}/current-user`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка получения текущего пользователя:', error);
+                return { is_authenticated: false };
+            }
+        },
+
+        async register(username, password) {
+            try {
+                const csrfToken = await this.getCSRFToken();
+                const response = await fetch(`${API_BASE}/register`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка регистрации:', error);
+                throw error;
+            }
+        },
+
+        async login(username, password) {
+            try {
+                const csrfToken = await this.getCSRFToken();
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка входа:', error);
+                throw error;
+            }
+        },
+
+        async logout() {
+            try {
+                const csrfToken = await this.getCSRFToken();
+                await fetch(`${API_BASE}/logout`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+            } catch (error) {
+                console.error('Ошибка выхода:', error);
+            }
+        },
+
+        async getLeaderboard() {
+            try {
+                const response = await fetch(`${API_BASE}/leaderboard`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка получения лидерборда:', error);
+                return leaderboardData;
+            }
+        },
+
+        async saveScore(time) {
+            try {
+                const csrfToken = await this.getCSRFToken();
+                const response = await fetch(`${API_BASE}/save-score`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ time })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка сохранения результата:', error);
+                throw error;
+            }
+        },
+
+        async getUserStats() {
+            try {
+                const response = await fetch(`${API_BASE}/user-stats`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка получения статистики:', error);
+                throw error;
+            }
+        },
+
+        async resetLeaderboard() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/reset-leaderboard`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка сброса лидерборда:', error);
+                throw error;
+            }
+        },
+
+        async deletePlayer(username) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/delete-player/${username}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Ошибка удаления игрока:', error);
+                throw error;
+            }
+        }
+    };
 
     const boardElement = document.getElementById('board');
     const mineCounterElement = document.getElementById('mineCounter');
@@ -130,15 +304,6 @@
                 }
             }
             renderBoard();
-            
-            if (currentUser) {
-                console.log('📡 [POST] /api/game-result', {
-                    user: currentUser,
-                    role: currentRole,
-                    result: 'lose',
-                    timestamp: new Date().toISOString()
-                });
-            }
             return;
         }
 
@@ -171,8 +336,10 @@
 
         if (allSafeRevealed && gameActive) {
             gameActive = false;
+            const finalTime = stopTimer();
             
             gameStatusEl.textContent = '🎉 ПОБЕДА! ФИОЛЕТОВАЯ МОЛНИЯ! 🎉';
+            console.log('Победа! Время:', finalTime, 'Статус:', { role: currentRole, user: currentUser });
             flashLightning();
             
             for (let r = 0; r < ROWS; r++) {
@@ -182,13 +349,20 @@
             }
             renderBoard();
             
-            if (currentUser) {
-                console.log('📡 [POST] /api/game-result', {
-                    user: currentUser,
-                    role: currentRole,
-                    result: 'win',
-                    timestamp: new Date().toISOString()
-                });
+            if (currentRole === 'user' && currentUser) {
+                console.log('Сохраняем результат на сервер:', finalTime);
+                apiClient.saveScore(finalTime)
+                    .then(result => {
+                        console.log('Результат сохранён:', result);
+                        gameStatusEl.textContent = '✅ Результат сохранён!';
+                    })
+                    .catch(error => {
+                        console.error('Ошибка сохранения результата:', error);
+                        gameStatusEl.textContent = '⚠️ Не удалось сохранить результат';
+                    });
+            } else {
+                console.log('Пользователь не залогинен, результат не сохраняется');
+                gameStatusEl.textContent = '👻 Результат не сохранён (авторизуйтесь чтобы сохранить)';
             }
         }
     }
@@ -208,6 +382,7 @@
         if (!minesGenerated) {
             generateMines(row, col);
             minesGenerated = true;
+            startTimer();
         }
 
         revealCell(row, col);
@@ -265,6 +440,8 @@
     }
 
     function resetGame() {
+        stopTimer();
+        document.getElementById('gameTimer').textContent = '0.000с';
         initMatrices();
         renderBoard();
         updateMineCounter();
@@ -287,12 +464,18 @@
 
     function renderLeaderboard() {
         let rows = '';
-        leaderboardData.forEach((player, index) => {
+        const topPlayers = leaderboardData.slice(0, 100);
+        topPlayers.forEach((player, index) => {
+            const timeStr = formatTime(player.time * 1000);
+            const date = new Date(player.created_at).toLocaleDateString('ru-RU', {
+                month: 'short',
+                day: 'numeric'
+            });
             rows += `
                 <tr>
-                    <td>${player.name}</td>
-                    <td>${player.mines}</td>
-                    <td>${player.time}</td>
+                    <td>${index + 1}. ${player.username}</td>
+                    <td>${timeStr}</td>
+                    <td style="font-size:0.85em; color:#a890c0;">${date}</td>
                 </tr>
             `;
         });
@@ -304,9 +487,9 @@
         leaderboardData.forEach((player, index) => {
             list += `
                 <div class="admin-user-row">
-                    <span>${player.name}</span>
+                    <span>${player.username}</span>
                     <span style="color:#9effb0;">👻 онлайн</span>
-                    <button class="remove-user-btn" data-username="${player.name}">✕</button>
+                    <button class="remove-user-btn" data-username="${player.username}">✕</button>
                 </div>
             `;
         });
@@ -314,7 +497,7 @@
     }
 
     function removeUserFromLeaderboard(username) {
-        leaderboardData = leaderboardData.filter(player => player.name !== username);
+        leaderboardData = leaderboardData.filter(player => player.username !== username);
         if (currentRole === 'admin') {
             renderRightPanel();
         }
@@ -328,16 +511,30 @@
         if (currentRole === 'guest') {
             html = `
                 <div class="register-box">
-                    <div class="register-title">🔐 РЕГИСТРАЦИЯ</div>
-                    <input type="text" class="register-input" id="usernameInput" placeholder="имя пользователя" value="Игрок_${Math.floor(Math.random() * 1000)}">
-                    <input type="password" class="register-input" id="passwordInput" placeholder="пароль">
-                    <div id="registerError" class="error-message" style="display: none;">Введите пароль</div>
-                    <button class="register-button" id="registerBtn">🌟 ЗАРЕГИСТРИРОВАТЬСЯ</button>
+                    <div class="register-title">🔐 ВХОД / РЕГИСТРАЦИЯ</div>
+                    <div id="loginForm">
+                        <div style="margin-bottom:10px; font-size:0.9em; color:#b0a0d0;">ВХОД</div>
+                        <input type="text" class="register-input" id="loginUsername" placeholder="имя пользователя">
+                        <input type="password" class="register-input" id="loginPassword" placeholder="пароль">
+                        <div id="loginError" class="error-message" style="display: none;"></div>
+                        <button class="register-button" id="loginBtn">🌐 ВОЙТИ</button>
+                        <button class="register-button" style="background:#3a3a5a; margin-top:8px;" id="switchToRegister">📝 Создать аккаунт</button>
+                    </div>
+                    
+                    <div id="registerForm" style="display:none;">
+                        <div style="margin-bottom:10px; font-size:0.9em; color:#b0a0d0;">НОВЫЙ АККАУНТ</div>
+                        <input type="text" class="register-input" id="usernameInput" placeholder="имя пользователя" value="Игрок_${Math.floor(Math.random() * 1000)}">
+                        <input type="password" class="register-input" id="passwordInput" placeholder="пароль">
+                        <div id="registerError" class="error-message" style="display: none;"></div>
+                        <button class="register-button" id="registerBtn">🌟 ЗАРЕГИСТРИРОВАТЬСЯ</button>
+                        <button class="register-button" style="background:#3a3a5a; margin-top:8px;" id="switchToLogin">🌐 Есть аккаунт?</button>
+                    </div>
+                </div>
                 </div>
                 <div class="leaderboard">
                     <h3>🏆 ТОП ИГРОКОВ</h3>
                     <table class="leaderboard-table">
-                        <thead><tr><th>ИГРОК</th><th>МИНЫ</th><th>ВРЕМЯ</th></tr></thead>
+                        <thead><tr><th>МЕСТО И ИГРОК</th><th>ВРЕМЯ</th><th>ДАТА</th></tr></thead>
                         <tbody>
                             ${renderLeaderboard()}
                         </tbody>
@@ -350,15 +547,14 @@
                 <div class="register-box">
                     <div class="register-title">⭐ ПРИВЕТ, ${currentUser}</div>
                     <div style="background:#2b1e3d; border-radius:40px; padding:15px; margin-bottom:16px; border:1px solid #9b79cf;">
-                        Ты в игре, удачи!
+                        Ты в игре, удачи! Результаты сохраняются автоматически.
                     </div>
-                    <button class="register-button" id="saveScoreBtn">💾 СОХРАНИТЬ РЕЗУЛЬТАТ</button>
-                    <button class="register-button" style="margin-top:10px; background:#352c4a;" id="logoutBtn">🚪 ВЫЙТИ</button>
+                    <button class="register-button" style="background:#352c4a;" id="logoutBtn">🚪 ВЫЙТИ</button>
                 </div>
                 <div class="leaderboard">
                     <h3>🏆 ТВОЙ ТОП</h3>
                     <table class="leaderboard-table">
-                        <thead><tr><th>ИГРОК</th><th>МИНЫ</th><th>ВРЕМЯ</th></tr></thead>
+                        <thead><tr><th>МЕСТО И ИГРОК</th><th>ВРЕМЯ</th><th>ДАТА</th></tr></thead>
                         <tbody>
                             ${renderLeaderboard()}
                         </tbody>
@@ -389,63 +585,145 @@
         rightSection.innerHTML = html;
         
         if (currentRole === 'guest') {
-            document.getElementById('registerBtn')?.addEventListener('click', () => {
-                const nick = document.getElementById('usernameInput')?.value.trim() || 'Игрок';
-                const password = document.getElementById('passwordInput')?.value.trim() || '';
-                const errorEl = document.getElementById('registerError');
+            // Обработчик переключения на форму регистрации
+            document.getElementById('switchToRegister')?.addEventListener('click', () => {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('registerForm').style.display = 'block';
+            });
+            
+            // Обработчик переключения на форму логина
+            document.getElementById('switchToLogin')?.addEventListener('click', () => {
+                document.getElementById('registerForm').style.display = 'none';
+                document.getElementById('loginForm').style.display = 'block';
+            });
+            
+            // Обработчик логина
+            document.getElementById('loginBtn')?.addEventListener('click', async () => {
+                const username = document.getElementById('loginUsername')?.value.trim() || '';
+                const password = document.getElementById('loginPassword')?.value.trim() || '';
+                const errorEl = document.getElementById('loginError');
                 
-                if (!password) {
+                console.log('Попытка входа:', { username });
+                
+                if (!username || !password) {
                     errorEl.style.display = 'block';
-                    errorEl.textContent = 'Введите пароль';
-                    gameStatusEl.textContent = '❌ Пароль не может быть пустым';
+                    errorEl.textContent = 'Введите имя пользователя и пароль';
+                    gameStatusEl.textContent = '❌ Заполните все поля';
                     return;
                 }
                 
                 errorEl.style.display = 'none';
+                gameStatusEl.textContent = '📡 Входим...';
                 
-                console.log('📡 [POST] /api/register', { 
-                    username: nick, 
-                    password: '●'.repeat(password.length) 
-                });
-                
-                if (nick === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-                    currentRole = 'admin';
-                    currentUser = nick;
-                } else {
-                    currentRole = 'user';
-                    currentUser = nick;
+                try {
+                    const result = await apiClient.login(username, password);
+                    console.log('Ответ от логина:', result);
+                    
+                    if (result.error) {
+                        errorEl.style.display = 'block';
+                        errorEl.textContent = result.error;
+                        gameStatusEl.textContent = '❌ ' + result.error;
+                        currentRole = 'guest';
+                        currentUser = null;
+                        updateRoleUI();
+                        renderRightPanel();
+                    } else if (result.username) {
+                        currentRole = result.role || 'user';
+                        currentUser = result.username;
+                        gameStatusEl.textContent = `🌟 Добро пожаловать, ${currentUser}!`;
+                        console.log('Вход успешен:', { role: currentRole, user: currentUser });
+                        flashLightning();
+                        updateRoleUI();
+                        renderRightPanel();
+                    } else {
+                        console.log('Неожиданный ответ:', result);
+                        errorEl.style.display = 'block';
+                        errorEl.textContent = 'Ошибка при входе';
+                    }
+                } catch (error) {
+                    console.error('Ошибка при входе:', error);
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Ошибка подключения';
+                    gameStatusEl.textContent = '❌ Ошибка подключения к серверу';
                 }
-                
-                if (!users.includes(nick)) users.push(nick);
-                updateRoleUI();
-                renderRightPanel();
-                
-                if (currentRole === 'admin') {
-                    gameStatusEl.textContent = '👑 Добро пожаловать, N3XUS_C0R3!';
-                } else {
-                    gameStatusEl.textContent = `⭐ Добро пожаловать, ${nick}!`;
-                }
-                flashLightning();
             });
             
-            document.getElementById('guestLeaderboardHint')?.addEventListener('click', () => {
-                console.log('📡 [GET] /api/leaderboard');
-                gameStatusEl.textContent = '📡 Запрос к бэкенду...';
+            document.getElementById('registerBtn')?.addEventListener('click', async () => {
+                const nick = document.getElementById('usernameInput')?.value.trim() || 'Игрок';
+                const password = document.getElementById('passwordInput')?.value.trim() || '';
+                const errorEl = document.getElementById('registerError');
+                
+                console.log('Попытка регистрации:', { username: nick });
+                
+                if (!nick || !password) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Введите имя пользователя и пароль';
+                    gameStatusEl.textContent = '❌ Заполните все поля';
+                    return;
+                }
+                
+                errorEl.style.display = 'none';
+                gameStatusEl.textContent = '📡 Регистрируем...';
+                
+                try {
+                    const result = await apiClient.register(nick, password);
+                    console.log('Ответ от регистрации:', result);
+                    
+                    if (result.error) {
+                        errorEl.style.display = 'block';
+                        errorEl.textContent = result.error;
+                        gameStatusEl.textContent = '❌ ' + result.error;
+                        currentRole = 'guest';
+                        currentUser = null;
+                        updateRoleUI();
+                        renderRightPanel();
+                    } else if (result.username) {
+                        currentRole = 'user';
+                        currentUser = result.username;
+                        gameStatusEl.textContent = `🌟 Добро пожаловать, ${currentUser}!`;
+                        console.log('Регистрация успешна:', { user: currentUser });
+                        flashLightning();
+                        updateRoleUI();
+                        renderRightPanel();
+                    } else {
+                        console.log('Неожиданный ответ от регистрации:', result);
+                        errorEl.style.display = 'block';
+                        errorEl.textContent = 'Ошибка при регистрации';
+                    }
+                } catch (error) {
+                    console.error('Ошибка при регистрации:', error);
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Ошибка подключения';
+                    gameStatusEl.textContent = '❌ Ошибка подключения к серверу';
+                    currentRole = 'guest';
+                    currentUser = null;
+                    updateRoleUI();
+                    renderRightPanel();
+                }
+            });
+            
+            document.getElementById('guestLeaderboardHint')?.addEventListener('click', async () => {
+                gameStatusEl.textContent = '📡 Загружаем лидерборд...';
+                try {
+                    const data = await apiClient.getLeaderboard();
+                    if (Array.isArray(data) && data.length > 0) {
+                        leaderboardData = data;
+                        renderRightPanel();
+                        gameStatusEl.textContent = '✅ Лидеборд загружен!';
+                    } else {
+                        gameStatusEl.textContent = '⚠️ Лидеборд пуст';
+                    }
+                } catch (error) {
+                    gameStatusEl.textContent = '❌ Ошибка загрузки лидерборда';
+                }
             });
         }
         
         if (currentRole === 'user') {
-            document.getElementById('saveScoreBtn')?.addEventListener('click', () => {
-                console.log('📡 [POST] /api/save-score', {
-                    user: currentUser
-                });
-                
-                gameStatusEl.textContent = '💾 Результат отправлен на бэкенд!';
-                flashLightning();
-            });
-            
-            document.getElementById('logoutBtn')?.addEventListener('click', () => {
-                console.log('📡 [POST] /api/logout', { user: currentUser });
+            document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+                try {
+                    await apiClient.logout();
+                } catch (error) {}
                 
                 currentRole = 'guest';
                 currentUser = null;
@@ -454,32 +732,40 @@
                 gameStatusEl.textContent = '👋 Ты вышел. Возвращайся!';
             });
             
-            document.getElementById('userLeaderboardHint')?.addEventListener('click', () => {
-                console.log('📡 [GET] /api/user-stats', { user: currentUser });
-                gameStatusEl.textContent = `📡 Загружаем статистику ${currentUser}...`;
+            document.getElementById('userLeaderboardHint')?.addEventListener('click', async () => {
+                gameStatusEl.textContent = '📡 Загружаем твою статистику...';
+                try {
+                    const stats = await apiClient.getUserStats();
+                    gameStatusEl.textContent = `📊 Побед: ${stats.stats.wins}/${stats.stats.total_games}`;
+                } catch (error) {
+                    gameStatusEl.textContent = '❌ Ошибка загрузки статистики';
+                }
             });
         }
         
         if (currentRole === 'admin') {
-            document.getElementById('resetLeaderboardBtn')?.addEventListener('click', () => {
-                console.log('📡 [POST] /api/admin/reset-leaderboard', { admin: currentUser });
-                
-                leaderboardData = [
-                    { name: 'SHADOW', mines: 9, time: '42с' },
-                    { name: 'VIOLET_M', mines: 8, time: '55с' },
-                    { name: 'NOX', mines: 7, time: '1:02' },
-                    { name: 'FANTOM', mines: 6, time: '1:20' },
-                    { name: 'LUNA', mines: 5, time: '1:47' }
-                ];
-                renderRightPanel();
-                
-                gameStatusEl.textContent = '🌩️ ЛИДЕРБОРД СБРОШЕН!';
-                flashLightning();
-                flashLightning();
+            document.getElementById('resetLeaderboardBtn')?.addEventListener('click', async () => {
+                gameStatusEl.textContent = '🌩️ Сбрасываем лидерборд...';
+                try {
+                    await apiClient.resetLeaderboard();
+                    const data = await apiClient.getLeaderboard();
+                    leaderboardData = data;
+                    renderRightPanel();
+                    gameStatusEl.textContent = '🌩️ ЛИДЕРБОРД СБРОШЕН!';
+                    flashLightning();
+                    flashLightning();
+                } catch (error) {
+                    gameStatusEl.textContent = '❌ Ошибка сброса лидерборда';
+                }
             });
             
-            document.getElementById('adminLogoutBtn')?.addEventListener('click', () => {
-                console.log('📡 [POST] /api/admin/logout', { admin: currentUser });
+            document.getElementById('adminLogoutBtn')?.addEventListener('click', async () => {
+                try {
+                    await fetch(`${API_BASE}/admin/logout`, {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                } catch (error) {}
                 
                 currentRole = 'guest';
                 currentUser = null;
@@ -490,47 +776,57 @@
             });
             
             document.querySelectorAll('.remove-user-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
+                btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     const username = btn.dataset.username;
-                    removeUserFromLeaderboard(username);
+                    try {
+                        await apiClient.deletePlayer(username);
+                        removeUserFromLeaderboard(username);
+                        gameStatusEl.textContent = `👻 Игрок ${username} удалён`;
+                    } catch (error) {
+                        gameStatusEl.textContent = '❌ Ошибка удаления игрока';
+                    }
                 });
             });
         }
     }
     
-    initMatrices();
-    renderBoard();
-    updateMineCounter();
-    renderRightPanel();
-    updateRoleUI();
-
-    resetBtn.addEventListener('click', resetGame);
-
-    window.saperAPI = {
-        updateLeaderboard: function(data) {
-            console.log('📥 Получены данные лидерборда:', data);
-            const tbody = document.querySelector('.leaderboard-table tbody');
-            if (tbody && data) {
-                tbody.innerHTML = data.map(row => 
-                    `<tr><td>${row.name}</td><td>${row.mines}</td><td>${row.time}</td></tr>`
-                ).join('');
-            }
-        },
-        
-        updateUserData: function(userData) {
-            console.log('📥 Данные пользователя:', userData);
-            if (userData.role) {
-                currentRole = userData.role;
+    async function initializeApp() {
+        // Проверяем, аутентифицирован ли пользователь
+        try {
+            const userData = await apiClient.getCurrentUser();
+            if (userData.is_authenticated) {
+                currentRole = userData.role || 'user';
                 currentUser = userData.username;
+                gameStatusEl.textContent = `🌟 С возвращением, ${currentUser}!`;
                 updateRoleUI();
-                renderRightPanel();
             }
-        },
-        
-        notify: function(message, type = 'info') {
-            gameStatusEl.textContent = `📢 ${message}`;
-            if (type === 'success') flashLightning();
+        } catch (error) {
+            console.log('Ошибка при проверке аутентификации:', error);
         }
-    };
+        
+        // Загружаем лидерборд
+        try {
+            const data = await apiClient.getLeaderboard();
+            if (Array.isArray(data) && data.length > 0) {
+                leaderboardData = data;
+            } else {
+                leaderboardData = [];
+            }
+        } catch (error) {
+            console.log('Используем локальный лидерборд');
+            leaderboardData = [];
+        }
+        
+        initMatrices();
+        renderBoard();
+        updateMineCounter();
+        renderRightPanel();
+        updateRoleUI();
+    }
+    
+    resetBtn.addEventListener('click', resetGame);
+    
+    // Инициализируем приложение при загрузке
+    initializeApp();
 })();

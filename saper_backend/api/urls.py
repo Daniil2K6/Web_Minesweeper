@@ -2,13 +2,17 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # CSRF
+    path('csrf-token', views.get_csrf_token, name='csrf_token'),
+    
     # Auth
+    path('login', views.login_view, name='login'),
     path('register', views.register, name='register'),
     path('logout', views.logout_view, name='logout'),
     path('admin/logout', views.admin_logout, name='admin_logout'),
+    path('current-user', views.current_user, name='current_user'),
     
     # Game
-    path('game-result', views.game_result, name='game_result'),
     path('save-score', views.save_score, name='save_score'),
     
     # Leaderboard
