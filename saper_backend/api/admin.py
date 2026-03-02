@@ -1,18 +1,11 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from .models import User, Leaderboard
+from .models import SimpleUser, Leaderboard
 
-@admin.register(User)
-class CustomUserAdmin(UserAdmin):
-    list_display = ['username', 'email', 'total_games', 'wins']
-    list_filter = ['is_superuser', 'is_active']
-    search_fields = ['username', 'email']
-    
-    fieldsets = UserAdmin.fieldsets + (
-        ('Статистика', {
-            'fields': ('total_games', 'wins')
-        }),
-    )
+@admin.register(SimpleUser)
+class SimpleUserAdmin(admin.ModelAdmin):
+    list_display = ['id', 'username', 'password', 'best_time']
+    search_fields = ['username']
+    ordering = ['id']
 
 @admin.register(Leaderboard)
 class LeaderboardAdmin(admin.ModelAdmin):

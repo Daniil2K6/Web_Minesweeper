@@ -1,34 +1,22 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Leaderboard
+from .models import SimpleUser, Leaderboard
 
-class UserSerializer(serializers.ModelSerializer):
-    """Сериализатор пользователя"""
+class SimpleUserSerializer(serializers.ModelSerializer):
+    """Сериализатор пользователя (простая таблица)"""
     class Meta:
-        model = User
-        fields = ['id', 'username', 'total_games', 'wins']
+        model = SimpleUser
+        fields = ['id', 'username', 'password', 'best_time', 'data_top_game']
 
-class RegisterSerializer(serializers.Serializer):
-    """Сериализатор регистрации с паролем"""
-    username = serializers.CharField(max_length=150)
-    password = serializers.CharField(write_only=True, min_length=1, style={'input_type': 'password'})
-    
-    def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("Пользователь с таким ником уже существует")
-        return value
-    
-    def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            password=validated_data['password']
-        )
-        return user
+class RegisterSerializer(serializers.ModelSerializer):
+    """Сериализатор регистрации для SimpleUser"""
+    class Meta:
+        model = SimpleUser
+        fields = ['username', 'password']
 
 class LeaderboardSerializer(serializers.ModelSerializer):
     """Сериализатор таблицы лидеров"""
     username = serializers.CharField(source='user.username', read_only=True)
-    
     class Meta:
         model = Leaderboard
         fields = ['id', 'username', 'time', 'created_at']
@@ -36,3 +24,5 @@ class LeaderboardSerializer(serializers.ModelSerializer):
 class SaveScoreSerializer(serializers.Serializer):
     """Сериализатор сохранения счёта"""
     time = serializers.FloatField(min_value=0.001)
+    username = serializers.CharField(max_length=150, required=True)
+    created_at = serializers.DateTimeField(required=False)

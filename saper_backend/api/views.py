@@ -7,9 +7,9 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth import authenticate as django_authenticate
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.middleware.csrf import get_token
-from .models import User, Leaderboard
+from .models import SimpleUser, Leaderboard
 from .serializers import (
-    UserSerializer, RegisterSerializer, LeaderboardSerializer,
+    SimpleUserSerializer, RegisterSerializer, LeaderboardSerializer,
     SaveScoreSerializer
 )
 
@@ -27,29 +27,25 @@ def get_csrf_token(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_view(request):
-    """Вход пользователя в систему"""
+    """Вход пользователя в систему (SimpleUser)"""
     username = request.data.get('username')
     password = request.data.get('password')
-    
     if not username or not password:
-        return Response({'error': 'Требуется имя пользователя и пароль'}, 
-                       status=status.HTTP_400_BAD_REQUEST)
-    
-    user = django_authenticate(username=username, password=password)
-    
-    if user is not None:
-        login(request._request, user)
-        role = 'admin' if user.username == ADMIN_USERNAME else 'user'
-        
-        return Response({
-            'message': 'Вход выполнен',
-            'user': UserSerializer(user).data,
-            'role': role,
-            'username': user.username
-        }, status=status.HTTP_200_OK)
-    
-    return Response({'error': 'Неверное имя пользователя или пароль'}, 
-                   status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Требуется имя пользователя и пароль'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        user = SimpleUser.objects.get(username=username)
+        if user.password == password:
+            role = 'admin' if user.username == ADMIN_USERNAME else 'user'
+            return Response({
+                'message': 'Вход выполнен',
+                'user': SimpleUserSerializer(user).data,
+                'role': role,
+                'username': user.username
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'Неверный пароль'}, status=status.HTTP_401_UNAUTHORIZED)
+    except SimpleUser.DoesNotExist:
+        return Response({'error': 'Пользователь не найден'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -74,20 +70,21 @@ def current_user(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
-    """Регистрация нового пользователя"""
+    """Регистрация нового пользователя (SimpleUser)"""
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
-        user = serializer.save()
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+        if SimpleUser.objects.filter(username=username).exists():
+            return Response({'error': 'Пользователь с таким именем уже существует'}, status=status.HTTP_400_BAD_REQUEST)
+        user = SimpleUser.objects.create(username=username, password=password)
         role = 'admin' if user.username == ADMIN_USERNAME else 'user'
-        login(request._request, user)
-        
         return Response({
             'message': 'Регистрация успешна',
-            'user': UserSerializer(user).data,
+            'user': SimpleUserSerializer(user).data,
             'role': role,
             'username': user.username
         }, status=status.HTTP_201_CREATED)
-    
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @csrf_exempt
@@ -111,40 +108,37 @@ def admin_logout(request):
 
 @csrf_exempt
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def save_score(request):
-    """Сохранение счёта в таблицу лидеров (только если время улучшено)"""
+    """Сохранение счёта по нажатию кнопки: принимает `time`, `username`, `created_at` (опционно).
+    Создаёт запись в `Leaderboard` и обновляет `SimpleUser.best_time` / `data_top_game` при улучшении.
+    """
     serializer = SaveScoreSerializer(data=request.data)
     if serializer.is_valid():
-        new_time = serializer.validated_data['time']
-        
-        # Проверяем есть ли уже результат для этого пользователя
-        existing = Leaderboard.objects.filter(user=request.user).order_by('time').first()
-        
-        if existing and existing.time < new_time:
-            # Уже есть лучший результат, не сохраняем
-            return Response({
-                'message': 'Результат не сохранён (уже есть лучший)',
-                'best_time': existing.time,
-                'new_time': new_time
-            }, status=status.HTTP_200_OK)
-        
-        # Создаём новую запись
-        leaderboard_entry = Leaderboard.objects.create(
-            user=request.user,
-            time=new_time
-        )
-        
-        # Обновляем статистику (только при сохранении нового результата)
-        request.user.total_games += 1
-        request.user.wins += 1
-        request.user.save()
-        
-        return Response({
-            'message': 'Счёт сохранён в таблицу лидеров',
-            'entry': LeaderboardSerializer(leaderboard_entry).data
-        }, status=status.HTTP_201_CREATED)
-    
+        from django.utils import timezone
+        time_val = serializer.validated_data['time']
+        username = serializer.validated_data.get('username')
+        created_at = serializer.validated_data.get('created_at') or timezone.now()
+
+        if not username:
+            return Response({'error': 'username is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Найти или создать SimpleUser (пароль пустой при создании клиентом)
+        user, created = SimpleUser.objects.get_or_create(username=username, defaults={'password': ''})
+
+        # Создаём запись в таблице лидеров с переданным временем и временем клиента
+        record = Leaderboard.objects.create(user=user, time=time_val, created_at=created_at)
+
+        # Обновляем best_time и дату, если нужно
+        updated = False
+        if user.best_time is None or time_val < user.best_time:
+            user.best_time = time_val
+            user.data_top_game = created_at
+            user.save()
+            updated = True
+
+        serializer_out = LeaderboardSerializer(record)
+        return Response({'message': 'Результат сохранён', 'record': serializer_out.data, 'best_updated': updated}, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])

@@ -2,38 +2,23 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
-class User(AbstractUser):
-    """Модель пользователя"""
-    groups = models.ManyToManyField(
-        'auth.Group',
-        verbose_name='groups',
-        blank=True,
-        help_text='The groups this user belongs to.',
-        related_name="api_user_set",
-        related_query_name="user",
-    )
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        verbose_name='user permissions',
-        blank=True,
-        help_text='Specific permissions for this user.',
-        related_name="api_user_set",
-        related_query_name="user",
-    )
-    
-    total_games = models.IntegerField(default=0, verbose_name="Всего игр")
-    wins = models.IntegerField(default=0, verbose_name="Побед")
-    
-    class Meta:
-        verbose_name = "Игрок"
-        verbose_name_plural = "Игроки"
-    
+class SimpleUser(models.Model):
+    """Простая таблица пользователей для админки и вывода"""
+    username = models.CharField(max_length=150, unique=True, verbose_name="Имя пользователя")
+    password = models.CharField(max_length=128, verbose_name="Пароль")
+    best_time = models.FloatField(null=True, blank=True, verbose_name="Лучшее время")
+    data_top_game = models.DateTimeField(null=True, blank=True, verbose_name="Дата лучшей игры")
+
     def __str__(self):
         return self.username
 
+    class Meta:
+        verbose_name = "Пользователь (простая таблица)"
+        verbose_name_plural = "Пользователи (простая таблица)"
+
 class Leaderboard(models.Model):
     """Таблица лидеров"""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='records')
+    user = models.ForeignKey('SimpleUser', on_delete=models.CASCADE, related_name='records')
     time = models.FloatField(verbose_name="Время (секунды)", help_text="Время в секундах с точностью 0.001")
     created_at = models.DateTimeField(default=timezone.now)
     
