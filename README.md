@@ -1,130 +1,52 @@
-# Web Minesweeper — Быстрый старт
+# Bomber (мини-проэкт)
 
-Коротко о проекте:
+Небольшой фронтенд-проэкт с тремя файлами в корне:
 
-Web Minesweeper — простая реализация игры «Сапёр». Фронтенд — статическая HTML/JS страница в папке `Bomber/`, серверная часть — Django-приложение в `saper_backend/`. База — SQLite (`saper_backend/db.sqlite3`).
+- `index.html` — разметка
+- `script.js` — логика клиента
+- `style.css` — стили
 
-Ниже — аккуратно оформленное руководство с рабочими командами. Копируйте и вставляйте команды прямо в терминал (без Markdown-обрамления). Если вы видите в README строки в обратных кавычках (`` ` ``) — это для форматирования, в терминале их не вводите.
+Цель: заменить содержимое ветки `frontend` в репозитории https://github.com/Daniil2K6/Web_Minesweeper на файлы этого проекта.
 
-## PowerShell (Windows)
+Как использовать
 
-- Клонировать и перейти в папку:
+1. Проверьте проект локально: откройте `index.html` в браузере.
 
-```powershell
-git clone https://github.com/Daniil2K6/Web_Minesweeper.git; cd Web_Minesweeper
-```
+2. Чтобы загрузить текущие файлы в удалённый репозиторий и заменить содержимое ветки `frontend`, используйте один из скриптов ниже или выполните команды вручную (см. раздел "Команды для пуша").
 
-- Создать и активировать виртуальное окружение:
+Безопасность
 
-```powershell
-python -m venv .venv; .\.venv\Scripts\Activate
-```
+Для пуша на GitHub убедитесь, что у вас есть права на запись в репозиторий и настроена аутентификация (SSH ключи или Personal Access Token).
 
-- Установить зависимости (если есть `requirements.txt`, иначе установит минимальные пакеты):
+Команды для пуша (пример)
 
-```powershell
-python -m pip install -r requirements.txt || python -m pip install django djangorestframework django-cors-headers
-```
-
-- Применить миграции:
-
-```powershell
-python saper_backend/manage.py migrate
-```
-
-- Запустить сервер разработки (оставит вывод в терминале):
-
-```powershell
-python saper_backend/manage.py runserver
-```
-
-- Открыть фронтенд (локально) в браузере:
-
-```powershell
-Start-Process Bomber\index.html
-```
-
-- Просмотреть все таблицы БД (скрипт расположен в `saper_backend/db_viewer.py`):
-
-```powershell
-python saper_backend/db_viewer.py
-```
-
-- Просмотреть таблицу `api_simpleuser`:
-
-```powershell
-python -c "import saper_backend.db_viewer as dv; dv.print_table('api_simpleuser')"
-```
-
-- Просмотреть таблицу `api_leaderboard`:
-
-```powershell
-python -c "import saper_backend.db_viewer as dv; dv.print_table('api_leaderboard')"
-```
-
-## Bash (Linux / macOS)
-
-> Заметка: в этой инструкции используется `python`. На системах, где команда `python` ссылается на Python 2, используйте `python3` вместо `python`.
-
-- Клонировать и перейти в папку:
+Пример с HTTPS и созданием отдельной (orphan) ветки `frontend`, которая заменит содержимое ветки на удалённом репозитории:
 
 ```bash
-git clone https://github.com/Daniil2K6/Web_Minesweeper.git; cd Web_Minesweeper
+# В каталоге этого проекта
+git init
+git remote remove origin 2>/dev/null || true
+git remote add origin https://github.com/Daniil2K6/Web_Minesweeper.git
+git fetch origin frontend || true
+git checkout --orphan frontend
+git rm -rf .
+git add -A
+git commit -m "Deploy frontend: replace branch content"
+git push origin frontend --force
 ```
 
-- Создать и активировать виртуальное окружение:
+Если используете Personal Access Token (PAT) и хотите передать его в URL (менее безопасно), замените URL на:
 
-```bash
-python -m venv .venv; source .venv/bin/activate
-```
+`https://<TOKEN>@github.com/Daniil2K6/Web_Minesweeper.git`
 
-- Установить зависимости:
+Скрипты
 
-```bash
-python -m pip install -r requirements.txt || python -m pip install django djangorestframework django-cors-headers
-```
+- [push_frontend.sh](push_frontend.sh) — для Linux / macOS / Git Bash
+- [push_frontend.bat](push_frontend.bat) — для Windows CMD
 
-- Применить миграции:
+Примечание
 
-```bash
-python saper_backend/manage.py migrate
-```
+Я не выполняю пуш в удалённый репозиторий от вашего имени. Ниже — готовые скрипты и команды; выполните их в своём окружении и подтвердите, если хотите, чтобы я помогал дальше.
 
-- Запустить сервер разработки:
-
-```bash
-python saper_backend/manage.py runserver
-```
-
-- Открыть фронтенд (локально):
-
-```bash
-xdg-open Bomber/index.html || open Bomber/index.html
-```
-
-- Просмотреть таблицы БД:
-
-```bash
-python -c "import saper_backend.db_viewer as dv; dv.print_all_tables()"
-```
-
-## Примечания и советы
-
-- Выполняйте команды из корня репозитория `Web_Minesweeper`.
-- Если вы видите в README команды, окружённые обратными кавычками (`` ` ``), не вводите эти обратные кавычки в терминале — они только для форматирования в Markdown.
-- Если виртуальное окружение активно и вы хотите выйти, выполните в терминале:
-
-```powershell
-deactivate
-```
-
-или в bash:
-
-```bash
-deactivate
-```
-
-Если `deactivate` не найдена, значит окружение в этой сессии не активно.
-
-Если хотите, я добавлю `requirements.txt` с необходимыми версиями и экспортирую текущие таблицы БД в `saper_backend/exports/`.
-
+---
+Автор: автоматически сгенерировано
