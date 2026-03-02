@@ -10,15 +10,13 @@
 1) Клонировать репозиторий и перейти в папку:
 
 ```powershell
-git clone https://github.com/Daniil2K6/Web_Minesweeper.git
-cd Web_Minesweeper
+git clone https://github.com/Daniil2K6/Web_Minesweeper.git; cd Web_Minesweeper
 ```
 
 2) (Рекомендуется) Создать виртуальное окружение и активировать:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate
+python -m venv .venv; .\.venv\Scripts\Activate
 ```
 
 3) Установить зависимости (если у вас нет `requirements.txt`, установите вручную):
