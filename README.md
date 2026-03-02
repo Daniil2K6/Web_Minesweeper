@@ -1,5 +1,9 @@
 # Web Minesweeper — Быстрый старт
 
+Коротко о проекте:
+
+Web Minesweeper — простая реализация игры «Сапёр». Фронтенд — статическая HTML/JS страница в папке `Bomber/`, серверная часть — Django-приложение в `saper_backend/`. База — SQLite (`saper_backend/db.sqlite3`).
+
 Ниже — аккуратно оформленное руководство с рабочими командами. Копируйте и вставляйте команды прямо в терминал (без Markdown-обрамления). Если вы видите в README строки в обратных кавычках (`` ` ``) — это для форматирования, в терминале их не вводите.
 
 ## PowerShell (Windows)
@@ -60,6 +64,8 @@ python -c "import saper_backend.db_viewer as dv; dv.print_table('api_leaderboard
 
 ## Bash (Linux / macOS)
 
+> Заметка: в этой инструкции используется `python`. На системах, где команда `python` ссылается на Python 2, используйте `python3` вместо `python`.
+
 - Клонировать и перейти в папку:
 
 ```bash
@@ -69,25 +75,25 @@ git clone https://github.com/Daniil2K6/Web_Minesweeper.git; cd Web_Minesweeper
 - Создать и активировать виртуальное окружение:
 
 ```bash
-python3 -m venv .venv; source .venv/bin/activate
+python -m venv .venv; source .venv/bin/activate
 ```
 
 - Установить зависимости:
 
 ```bash
-python3 -m pip install -r requirements.txt || python3 -m pip install django djangorestframework django-cors-headers
+python -m pip install -r requirements.txt || python -m pip install django djangorestframework django-cors-headers
 ```
 
 - Применить миграции:
 
 ```bash
-python3 saper_backend/manage.py migrate
+python saper_backend/manage.py migrate
 ```
 
 - Запустить сервер разработки:
 
 ```bash
-python3 saper_backend/manage.py runserver
+python saper_backend/manage.py runserver
 ```
 
 - Открыть фронтенд (локально):
@@ -99,7 +105,7 @@ xdg-open Bomber/index.html || open Bomber/index.html
 - Просмотреть таблицы БД:
 
 ```bash
-python3 -c "import saper_backend.db_viewer as dv; dv.print_all_tables()"
+python -c "import saper_backend.db_viewer as dv; dv.print_all_tables()"
 ```
 
 ## Примечания и советы
